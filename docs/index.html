@@ -453,6 +453,233 @@
             color: #e85d04;
             font-family: 'Courier New', monospace;
         }
+
+        .journal-form {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .journal-form input, .journal-form select {
+            background: #0a0a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .journal-form input:focus, .journal-form select:focus {
+            outline: none;
+            border-color: #e85d04;
+        }
+
+        .journal-btn {
+            background: #e85d04;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            grid-column: span 3;
+        }
+
+        .journal-btn:hover {
+            background: #ff6b1a;
+        }
+
+        .journal-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .journal-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #0a0a1a;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid;
+        }
+
+        .journal-item.win {
+            border-left-color: #00d084;
+        }
+
+        .journal-item.loss {
+            border-left-color: #ff4757;
+        }
+
+        .journal-info {
+            flex: 1;
+        }
+
+        .journal-pnl {
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .journal-pnl.win {
+            color: #00d084;
+        }
+
+        .journal-pnl.loss {
+            color: #ff4757;
+        }
+
+        .journal-delete {
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .journal-delete:hover {
+            color: #ff4757;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .stat-card {
+            background: #0a0a1a;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card-label {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-card-value {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .stat-card-value.positive {
+            color: #00d084;
+        }
+
+        .stat-card-value.negative {
+            color: #ff4757;
+        }
+
+        .checklist {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #0a0a1a;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .checklist-item:hover {
+            background: #1a1a2e;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: #e85d04;
+        }
+
+        .checklist-item.checked {
+            opacity: 0.6;
+            text-decoration: line-through;
+        }
+
+        .risk-manager {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .risk-input label {
+            display: block;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .risk-input input {
+            width: 100%;
+            background: #0a0a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .risk-status {
+            grid-column: span 2;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .risk-status.safe {
+            background: rgba(0, 208, 132, 0.2);
+            color: #00d084;
+            border: 1px solid #00d084;
+        }
+
+        .risk-status.warning {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+            border: 1px solid #ffc107;
+        }
+
+        .risk-status.danger {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid #ff4757;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #0a0a1a;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e85d04, #ff6b1a);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+        }
         
         @media (max-width: 1024px) {
             .grid {
@@ -651,6 +878,100 @@ Example:
                 <div class="daily-target" id="dailyTargetBox">
                     <div class="daily-target-label">To make $100/day at this R:R</div>
                     <div class="daily-target-value" id="dailyTargetValue">--</div>
+                </div>
+            </div>
+            
+            <!-- Trading Journal -->
+            <div class="card">
+                <h2>📓 Trading Journal</h2>
+                <div class="journal-form">
+                    <input type="text" id="tradeDate" placeholder="Date (YYYY-MM-DD)">
+                    <select id="tradeDirection">
+                        <option value="long">Long</option>
+                        <option value="short">Short</option>
+                    </select>
+                    <input type="number" id="tradePnL" placeholder="P&L ($)" step="0.01">
+                    <input type="text" id="tradeSetup" placeholder="Setup/Strategy">
+                    <input type="text" id="tradeNotes" placeholder="Notes">
+                    <button class="journal-btn" onclick="addTrade()">Add Trade</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-card-label">Today's P&L</div>
+                        <div class="stat-card-value" id="todayPnL">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Win Rate</div>
+                        <div class="stat-card-value" id="winRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Total Trades</div>
+                        <div class="stat-card-value" id="totalTrades">0</div>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="dailyProgress" style="width: 0%">$0 / $100</div>
+                </div>
+                <div class="journal-list" id="journalList"></div>
+            </div>
+            
+            <!-- Pre-Trade Checklist -->
+            <div class="card">
+                <h2>✅ Pre-Trade Checklist</h2>
+                <div class="checklist" id="checklist">
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="trend">
+                        <span>Identified trend direction (HTF)</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="level">
+                        <span>Key support/resistance level marked</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="confluence">
+                        <span>Multiple confluences present</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="rr">
+                        <span>R:R is at least 1:2</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="session">
+                        <span>Trading during active session</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="news">
+                        <span>No high-impact news in 30 min</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="risk">
+                        <span>Risk per trade ≤ 2% of account</span>
+                    </label>
+                    <label class="checklist-item">
+                        <input type="checkbox" data-item="emotions">
+                        <span>Emotions in check / not revenge trading</span>
+                    </label>
+                </div>
+                <div style="margin-top: 16px; text-align: center;">
+                    <button class="journal-btn" onclick="resetChecklist()">Reset Checklist</button>
+                </div>
+            </div>
+            
+            <!-- Risk Manager -->
+            <div class="card">
+                <h2>🛡️ Risk Manager</h2>
+                <div class="risk-manager">
+                    <div class="risk-input">
+                        <label>Daily Loss Limit ($)</label>
+                        <input type="number" id="dailyLossLimit" value="100" onchange="updateRiskStatus()">
+                    </div>
+                    <div class="risk-input">
+                        <label>Max Trades Per Day</label>
+                        <input type="number" id="maxTrades" value="5" onchange="updateRiskStatus()">
+                    </div>
+                    <div class="risk-status safe" id="riskStatus">
+                        ✅ Trading Allowed - Within Limits
+                    </div>
                 </div>
             </div>
         </div>
@@ -855,6 +1176,160 @@ Example:
         ['calcEntry', 'calcTarget', 'calcStop', 'calcLot'].forEach(id => {
             document.getElementById(id).addEventListener('input', calculatePosition);
         });
+
+        // Trading Journal
+        let trades = JSON.parse(localStorage.getItem('usoil_trades') || '[]');
+        
+        function saveTrades() {
+            localStorage.setItem('usoil_trades', JSON.stringify(trades));
+        }
+        
+        function addTrade() {
+            const date = document.getElementById('tradeDate').value || new Date().toISOString().split('T')[0];
+            const direction = document.getElementById('tradeDirection').value;
+            const pnl = parseFloat(document.getElementById('tradePnL').value);
+            const setup = document.getElementById('tradeSetup').value;
+            const notes = document.getElementById('tradeNotes').value;
+            
+            if (isNaN(pnl)) {
+                alert('Please enter P&L amount');
+                return;
+            }
+            
+            const trade = {
+                id: Date.now(),
+                date,
+                direction,
+                pnl,
+                setup,
+                notes
+            };
+            
+            trades.unshift(trade);
+            saveTrades();
+            renderJournal();
+            updateStats();
+            updateRiskStatus();
+            
+            // Clear form
+            document.getElementById('tradePnL').value = '';
+            document.getElementById('tradeSetup').value = '';
+            document.getElementById('tradeNotes').value = '';
+        }
+        
+        function deleteTrade(id) {
+            trades = trades.filter(t => t.id !== id);
+            saveTrades();
+            renderJournal();
+            updateStats();
+            updateRiskStatus();
+        }
+        
+        function renderJournal() {
+            const list = document.getElementById('journalList');
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Show only today's trades in the list
+            const todayTrades = trades.filter(t => t.date === today);
+            
+            list.innerHTML = todayTrades.map(trade => `
+                <div class="journal-item ${trade.pnl >= 0 ? 'win' : 'loss'}">
+                    <div class="journal-info">
+                        <div>${trade.direction.toUpperCase()} - ${trade.setup || 'No setup'}</div>
+                        <div style="font-size: 11px; color: #888;">${trade.notes || ''}</div>
+                    </div>
+                    <div class="journal-pnl ${trade.pnl >= 0 ? 'win' : 'loss'}">
+                        ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}
+                    </div>
+                    <button class="journal-delete" onclick="deleteTrade(${trade.id})">×</button>
+                </div>
+            `).join('');
+        }
+        
+        function updateStats() {
+            const today = new Date().toISOString().split('T')[0];
+            const todayTrades = trades.filter(t => t.date === today);
+            
+            const todayPnL = todayTrades.reduce((sum, t) => sum + t.pnl, 0);
+            const totalTrades = todayTrades.length;
+            const wins = todayTrades.filter(t => t.pnl > 0).length;
+            const winRate = totalTrades > 0 ? (wins / totalTrades * 100).toFixed(0) : 0;
+            
+            document.getElementById('todayPnL').textContent = (todayPnL >= 0 ? '+' : '') + '$' + todayPnL.toFixed(2);
+            document.getElementById('todayPnL').className = 'stat-card-value ' + (todayPnL >= 0 ? 'positive' : 'negative');
+            document.getElementById('winRate').textContent = winRate + '%';
+            document.getElementById('totalTrades').textContent = totalTrades;
+            
+            // Update progress bar
+            const progress = Math.min(100, Math.max(0, (todayPnL / 100) * 100));
+            document.getElementById('dailyProgress').style.width = progress + '%';
+            document.getElementById('dailyProgress').textContent = '$' + todayPnL.toFixed(0) + ' / $100';
+        }
+        
+        // Checklist
+        function loadChecklist() {
+            const saved = JSON.parse(localStorage.getItem('usoil_checklist') || '{}');
+            document.querySelectorAll('.checklist-item input').forEach(cb => {
+                cb.checked = saved[cb.dataset.item] || false;
+                updateChecklistItem(cb);
+            });
+        }
+        
+        function updateChecklistItem(checkbox) {
+            const item = checkbox.closest('.checklist-item');
+            item.classList.toggle('checked', checkbox.checked);
+            
+            const saved = JSON.parse(localStorage.getItem('usoil_checklist') || '{}');
+            saved[checkbox.dataset.item] = checkbox.checked;
+            localStorage.setItem('usoil_checklist', JSON.stringify(saved));
+        }
+        
+        function resetChecklist() {
+            document.querySelectorAll('.checklist-item input').forEach(cb => {
+                cb.checked = false;
+                updateChecklistItem(cb);
+            });
+        }
+        
+        document.querySelectorAll('.checklist-item input').forEach(cb => {
+            cb.addEventListener('change', () => updateChecklistItem(cb));
+        });
+        
+        // Risk Manager
+        function updateRiskStatus() {
+            const today = new Date().toISOString().split('T')[0];
+            const todayTrades = trades.filter(t => t.date === today);
+            const todayPnL = todayTrades.reduce((sum, t) => sum + t.pnl, 0);
+            const totalTrades = todayTrades.length;
+            
+            const lossLimit = parseFloat(document.getElementById('dailyLossLimit').value) || 100;
+            const maxTrades = parseInt(document.getElementById('maxTrades').value) || 5;
+            
+            const statusEl = document.getElementById('riskStatus');
+            
+            if (todayPnL <= -lossLimit) {
+                statusEl.className = 'risk-status danger';
+                statusEl.textContent = '🚫 STOP TRADING - Daily Loss Limit Hit';
+            } else if (totalTrades >= maxTrades) {
+                statusEl.className = 'risk-status warning';
+                statusEl.textContent = '⚠️ Max Trades Reached - Take a Break';
+            } else if (todayPnL >= 100) {
+                statusEl.className = 'risk-status safe';
+                statusEl.textContent = '✅ Daily Target Hit! - Consider Stopping';
+            } else {
+                statusEl.className = 'risk-status safe';
+                statusEl.textContent = '✅ Trading Allowed - Within Limits';
+            }
+        }
+        
+        // Set today's date
+        document.getElementById('tradeDate').value = new Date().toISOString().split('T')[0];
+        
+        // Initialize
+        renderJournal();
+        updateStats();
+        loadChecklist();
+        updateRiskStatus();
     </script>
 </body>
 </html>
