@@ -356,6 +356,103 @@
             color: #555;
             font-size: 12px;
         }
+
+        .calc-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .calc-input label {
+            display: block;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .calc-input input, .calc-input select {
+            width: 100%;
+            background: #0a0a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .calc-input input:focus, .calc-input select:focus {
+            outline: none;
+            border-color: #e85d04;
+        }
+
+        .calc-results {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .calc-result-box {
+            background: #0a0a1a;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #252545;
+        }
+
+        .calc-result-box.profit {
+            border-color: #00d084;
+        }
+
+        .calc-result-box.loss {
+            border-color: #ff4757;
+        }
+
+        .calc-label {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .calc-value {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .calc-result-box.profit .calc-value {
+            color: #00d084;
+        }
+
+        .calc-result-box.loss .calc-value {
+            color: #ff4757;
+        }
+
+        .daily-target {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e85d04;
+        }
+
+        .daily-target-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .daily-target-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e85d04;
+            font-family: 'Courier New', monospace;
+        }
         
         @media (max-width: 1024px) {
             .grid {
@@ -506,6 +603,55 @@ Example:
 - Watching 70.00 support for long entry
 - Stop below 69.50
 - Target 72.00 resistance"></textarea>
+            </div>
+            
+            <!-- $100/Day Position Calculator -->
+            <div class="card">
+                <h2>🎯 $100/Day Calculator</h2>
+                <div class="calc-grid">
+                    <div class="calc-input">
+                        <label>Entry Price</label>
+                        <input type="number" id="calcEntry" placeholder="68.50" step="0.01">
+                    </div>
+                    <div class="calc-input">
+                        <label>Target Price</label>
+                        <input type="number" id="calcTarget" placeholder="69.50" step="0.01">
+                    </div>
+                    <div class="calc-input">
+                        <label>Stop Loss</label>
+                        <input type="number" id="calcStop" placeholder="68.00" step="0.01">
+                    </div>
+                    <div class="calc-input">
+                        <label>Lot Size</label>
+                        <select id="calcLot">
+                            <option value="1000">0.01 (1,000 units)</option>
+                            <option value="10000">0.10 (10,000 units)</option>
+                            <option value="100000" selected>1.00 (100,000 units)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="calc-results">
+                    <div class="calc-result-box">
+                        <div class="calc-label">Pips to Target</div>
+                        <div class="calc-value" id="pipsToTarget">--</div>
+                    </div>
+                    <div class="calc-result-box">
+                        <div class="calc-label">Pips to Stop</div>
+                        <div class="calc-value" id="pipsToStop">--</div>
+                    </div>
+                    <div class="calc-result-box profit">
+                        <div class="calc-label">Profit if Target Hit</div>
+                        <div class="calc-value" id="profitTarget">--</div>
+                    </div>
+                    <div class="calc-result-box loss">
+                        <div class="calc-label">Loss if Stop Hit</div>
+                        <div class="calc-value" id="lossStop">--</div>
+                    </div>
+                </div>
+                <div class="daily-target" id="dailyTargetBox">
+                    <div class="daily-target-label">To make $100/day at this R:R</div>
+                    <div class="daily-target-value" id="dailyTargetValue">--</div>
+                </div>
             </div>
         </div>
         
@@ -671,6 +817,44 @@ Example:
         // Try to fetch real price on load and every 30 seconds
         fetchRealPrice();
         setInterval(fetchRealPrice, 30000);
+
+        // Position Calculator
+        function calculatePosition() {
+            const entry = parseFloat(document.getElementById('calcEntry').value);
+            const target = parseFloat(document.getElementById('calcTarget').value);
+            const stop = parseFloat(document.getElementById('calcStop').value);
+            const lotSize = parseInt(document.getElementById('calcLot').value);
+            
+            if (!entry || !target || !stop) return;
+            
+            // USOIL: 1 pip = $0.01 = $1 per 1 standard lot (100,000 units)
+            // For X units: pip value = lotSize / 100,000 * $1
+            const pipValue = lotSize / 100000; // $ per pip
+            
+            const pipsToTarget = Math.abs(target - entry) * 100; // USOIL pips are 2 decimal places
+            const pipsToStop = Math.abs(stop - entry) * 100;
+            
+            const profit = pipsToTarget * pipValue;
+            const loss = pipsToStop * pipValue;
+            
+            document.getElementById('pipsToTarget').textContent = pipsToTarget.toFixed(1);
+            document.getElementById('pipsToStop').textContent = pipsToStop.toFixed(1);
+            document.getElementById('profitTarget').textContent = '$' + profit.toFixed(2);
+            document.getElementById('lossStop').textContent = '$' + loss.toFixed(2);
+            
+            // Calculate what you need to hit $100/day
+            if (profit > 0) {
+                const tradesNeeded = Math.ceil(100 / profit);
+                const rr = (pipsToTarget / pipsToStop).toFixed(1);
+                document.getElementById('dailyTargetValue').textContent = 
+                    tradesNeeded + ' trade' + (tradesNeeded > 1 ? 's' : '') + ' (R:R ' + rr + ':1)';
+            }
+        }
+        
+        // Attach calculator listeners
+        ['calcEntry', 'calcTarget', 'calcStop', 'calcLot'].forEach(id => {
+            document.getElementById(id).addEventListener('input', calculatePosition);
+        });
     </script>
 </body>
 </html>
