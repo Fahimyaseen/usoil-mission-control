@@ -1,0 +1,305 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © traderschatroom88 / fahimyaseen
+// MC+XXX Ultimate - Complete Trading System
+
+//@version=6
+strategy(
+ 'MC+XXX Ultimate',
+ shorttitle = 'MC+XXX Ultimate',
+ overlay = true,
+ explicit_plot_zorder = true,
+ pyramiding = 0,
+ default_qty_type = strategy.percent_of_equity,
+ default_qty_value = 10,
+ calc_on_every_tick = false,
+ process_orders_on_close = true,
+ initial_capital = 10000)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUT GROUPS
+// ═════════════════════════════════════════════════════════════════════════════
+G_MC = '🧠 Master Coach'
+G_XXX = '📊 XXX Indicator'
+G_SD = '📦 Supply/Demand'
+G_RISK = '🛡️ Risk Management'
+G_DISP = '🎨 Display'
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER COACH INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+mfiLength = input.int(14, "MFI Length", minval=5, group=G_MC)
+rsiLength = input.int(14, "RSI Length", minval=5, group=G_MC)
+htfTimeframe = input.timeframe("15", "HTF Trend Filter", group=G_MC)
+volSMA_len = input.int(20, "Volume SMA Length", group=G_MC)
+structLen = input.int(5, "Structure Lookback", minval=2, group=G_MC)
+minGrade = input.int(4, "Minimum Grade for Signal (1-6)", minval=1, maxval=6, group=G_MC)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// XXX INDICATOR INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+basisLen = input.int(2, 'ALMA Period', minval=1, group=G_XXX)
+offsetSigma = input.int(5, 'ALMA Sigma', minval=0, group=G_XXX)
+offsetALMA = input.float(0.85, 'ALMA Offset', minval=0, step=0.01, group=G_XXX)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SUPPLY/DEMAND INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+swingLen = input.int(10, 'Swing Lookback', minval=1, group=G_SD)
+historyKeep = input.int(20, 'Zone History to Keep', minval=5, maxval=50, group=G_SD)
+boxWidth = input.float(2.5, 'Zone Width (ATR)', minval=0.5, maxval=10, step=0.5, group=G_SD)
+showZones = input.bool(true, 'Show Supply/Demand Zones', group=G_SD)
+showLabels = input.bool(false, 'Show HH/HL/LH/LL Labels', group=G_SD)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+atrSLMult = input.float(1.5, "Stop Loss ATR Multiplier", step=0.1, group=G_RISK)
+atrTP1Mult = input.float(1.0, "TP1 ATR Multiplier", step=0.1, group=G_RISK)
+atrTP2Mult = input.float(2.0, "TP2 ATR Multiplier", step=0.1, group=G_RISK)
+atrTP3Mult = input.float(3.0, "TP3 ATR Multiplier", step=0.1, group=G_RISK)
+useTrailing = input.bool(true, "Use Trailing Stop", group=G_RISK)
+atrTrailMult = input.float(2.0, "Trailing Stop ATR Multiplier", step=0.1, group=G_RISK)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DISPLAY INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+showMA = input.bool(true, 'Show ALMA Line', group=G_DISP)
+showSignals = input.bool(true, 'Show Entry Signals', group=G_DISP)
+showDashboard = input.bool(true, 'Show Dashboard', group=G_DISP)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER COACH LOGIC
+// ═════════════════════════════════════════════════════════════════════════════
+var float lastHigh = na
+var float lastLow = na
+var int structure = 0
+
+pH = ta.pivothigh(high, structLen, structLen)
+pL = ta.pivotlow(low, structLen, structLen)
+
+if not na(pH)
+    lastHigh := pH
+if not na(pL)
+    lastLow := pL
+
+if close > lastHigh
+    structure := 1
+else if close < lastLow
+    structure := -1
+
+structBull = structure == 1
+
+// Core indicators
+mfiVal = ta.mfi(close, mfiLength)
+mfiBull = mfiVal > 50
+htfEMA = request.security(syminfo.tickerid, htfTimeframe, ta.ema(close, 50), lookahead=barmerge.lookahead_off)
+htfBull = close > htfEMA
+rsiVal = ta.rsi(close, rsiLength)
+rsiBull = rsiVal > 50
+volSMA = ta.sma(volume, volSMA_len)
+volBull = volume > volSMA
+atr = ta.atr(14)
+volatilityOk = atr > ta.sma(atr, 50)
+
+// Grading system (out of 6)
+int bullGrade = (mfiBull ? 1 : 0) + (htfBull ? 1 : 0) + (rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (structBull ? 1 : 0)
+int bearGrade = (not mfiBull ? 1 : 0) + (not htfBull ? 1 : 0) + (not rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (not structBull ? 1 : 0)
+
+mcBull = bullGrade >= minGrade
+mcBear = bearGrade >= minGrade
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALMA CALCULATION
+// ═════════════════════════════════════════════════════════════════════════════
+alma(src, len, offset, sigma) =>
+    m = offset * (len - 1)
+    s = len / sigma
+    sum = 0.0
+    norm = 0.0
+    for i = 0 to len - 1
+        weight = math.exp(-math.pow(i - m, 2) / (2 * math.pow(s, 2)))
+        sum += nz(src[i]) * weight
+        norm += weight
+    norm != 0 ? sum / norm : na
+
+basis = alma(close, basisLen, offsetALMA, offsetSigma)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SUPPLY/DEMAND ZONES
+// ═════════════════════════════════════════════════════════════════════════════
+var box[] supplyBoxes = array.new_box(historyKeep, na)
+var box[] demandBoxes = array.new_box(historyKeep, na)
+
+// Helper function to manage arrays
+f_array_add_pop(array, new_value) =>
+    array.unshift(array, new_value)
+    array.pop(array)
+
+// Swing detection
+swingHigh = ta.pivothigh(high, swingLen, swingLen)
+swingLow = ta.pivotlow(low, swingLen, swingLen)
+
+// Draw Supply Zone
+if not na(swingHigh) and showZones
+    box_top = swingHigh
+    box_bottom = swingHigh - (atr * boxWidth / 10)
+    boxRight = bar_index + 50
+    
+    newBox = box.new(bar_index - swingLen, box_top, boxRight, box_bottom,
+                     border_color=color.red, bgcolor=color.new(color.red, 90),
+                     extend=extend.right, text="SUPPLY", text_color=color.white,
+                     text_size=size.small, xloc=xloc.bar_index)
+    
+    if array.size(supplyBoxes) >= historyKeep
+        box.delete(array.get(supplyBoxes, historyKeep - 1))
+    f_array_add_pop(supplyBoxes, newBox)
+
+// Draw Demand Zone
+if not na(swingLow) and showZones
+    box_bottom = swingLow
+    box_top = swingLow + (atr * boxWidth / 10)
+    boxRight = bar_index + 50
+    
+    newBox = box.new(bar_index - swingLen, box_top, boxRight, box_bottom,
+                     border_color=color.green, bgcolor=color.new(color.green, 90),
+                     extend=extend.right, text="DEMAND", text_color=color.white,
+                     text_size=size.small, xloc=xloc.bar_index)
+    
+    if array.size(demandBoxes) >= historyKeep
+        box.delete(array.get(demandBoxes, historyKeep - 1))
+    f_array_add_pop(demandBoxes, newBox)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNAL GENERATION
+// ═════════════════════════════════════════════════════════════════════════════
+// Combined signal: ALMA crossover + Master Coach confirmation
+longSignal = ta.crossover(close, basis) and mcBull
+shortSignal = ta.crossunder(close, basis) and mcBear
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+longSL = close - (atr * atrSLMult)
+longTP1 = close + (atr * atrTP1Mult)
+longTP2 = close + (atr * atrTP2Mult)
+longTP3 = close + (atr * atrTP3Mult)
+
+shortSL = close + (atr * atrSLMult)
+shortTP1 = close - (atr * atrTP1Mult)
+shortTP2 = close - (atr * atrTP2Mult)
+shortTP3 = close - (atr * atrTP3Mult)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STRATEGY EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+inLong = strategy.position_size > 0
+inShort = strategy.position_size < 0
+
+// Entry with both confirmations
+if longSignal and not inLong and not inShort
+    strategy.entry("Long", strategy.long)
+    if useTrailing
+        strategy.exit("Long Exit", "Long", stop=longSL, trail_points=atr * atrTrailMult / syminfo.mintick, trail_offset=atr * atrTrailMult / syminfo.mintick)
+    else
+        strategy.exit("Long Exit", "Long", stop=longSL, limit=longTP3)
+
+if shortSignal and not inShort and not inLong
+    strategy.entry("Short", strategy.short)
+    if useTrailing
+        strategy.exit("Short Exit", "Short", stop=shortSL, trail_points=atr * atrTrailMult / syminfo.mintick, trail_offset=atr * atrTrailMult / syminfo.mintick)
+    else
+        strategy.exit("Short Exit", "Short", stop=shortSL, limit=shortTP3)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═════════════════════════════════════════════════════════════════════════════
+plot(showMA ? basis : na, "ALMA", color=color.orange, linewidth=2)
+
+plotshape(showSignals and longSignal, title="Long Entry", location=location.belowbar,
+          color=color.green, style=shape.triangleup, size=size.normal, text="LONG")
+plotshape(showSignals and shortSignal, title="Short Entry", location=location.abovebar,
+          color=color.red, style=shape.triangledown, size=size.normal, text="SHORT")
+
+bgcolor(longSignal ? color.new(color.green, 90) : shortSignal ? color.new(color.red, 90) : na, title="Signal Background")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═════════════════════════════════════════════════════════════════════════════
+if showDashboard
+    var table dash = table.new("top_right", 2, 10, frame_color=color.gray, frame_width=1,
+                               border_color=color.gray, border_width=1, bgcolor=color.new(color.black, 15))
+    
+    if barstate.islast
+        table.cell(dash, 0, 0, "MC+XXX ULTIMATE", text_color=color.white, bgcolor=color.purple)
+        table.merge_cells(dash, 0, 0, 1, 0)
+        
+        sigText = longSignal ? "🟢 LONG" : shortSignal ? "🔴 SHORT" : "⏳ WAIT"
+        sigCol = longSignal ? color.green : shortSignal ? color.red : color.gray
+        
+        table.cell(dash, 0, 1, "Signal", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 1, sigText, text_color=sigCol, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 2, "MC Grade", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 2, mcBull ? str.tostring(bullGrade) + "/6 BULL" : mcBear ? str.tostring(bearGrade) + "/6 BEAR" : "NEUTRAL",
+                   text_color=mcBull ? color.green : mcBear ? color.red : color.gray, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 3, "Structure", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 3, structBull ? "BULLISH" : "BEARISH",
+                   text_color=structBull ? color.green : color.red, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 4, "MFI", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 4, mfiBull ? "INFLOW ✓" : "OUTFLOW ✗",
+                   text_color=mfiBull ? color.green : color.red, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 5, "RSI", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 5, str.tostring(rsiVal, "#.") + (rsiBull ? " ✓" : " ✗"),
+                   text_color=rsiBull ? color.green : color.red, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 6, "Volume", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 6, volBull ? "HIGH ✓" : "LOW",
+                   text_color=volBull ? color.green : color.gray, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 7, "Entry Price", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 7, str.tostring(close, format.mintick),
+                   text_color=color.yellow, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 8, "Stop Loss", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 8, str.tostring(longSignal ? longSL : shortSL, format.mintick),
+                   text_color=color.red, text_halign=text.align_right)
+        
+        table.cell(dash, 0, 9, "Take Profit 3", text_color=color.white, text_halign=text.align_left)
+        table.cell(dash, 1, 9, str.tostring(longSignal ? longTP3 : shortTP3, format.mintick),
+                   text_color=color.green, text_halign=text.align_right)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertLong = "🛢️ USOIL LONG SIGNAL\n\n" +
+            "Entry: " + str.tostring(close, format.mintick) + "\n" +
+            "Stop Loss: " + str.tostring(longSL, format.mintick) + "\n" +
+            "TP1: " + str.tostring(longTP1, format.mintick) + "\n" +
+            "TP2: " + str.tostring(longTP2, format.mintick) + "\n" +
+            "TP3: " + str.tostring(longTP3, format.mintick) + "\n\n" +
+            "Master Coach Grade: " + str.tostring(bullGrade) + "/6\n" +
+            "Structure: BULLISH\n" +
+            "Time: " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + " Dubai"
+
+alertShort = "🛢️ USOIL SHORT SIGNAL\n\n" +
+             "Entry: " + str.tostring(close, format.mintick) + "\n" +
+             "Stop Loss: " + str.tostring(shortSL, format.mintick) + "\n" +
+             "TP1: " + str.tostring(shortTP1, format.mintick) + "\n" +
+             "TP2: " + str.tostring(shortTP2, format.mintick) + "\n" +
+             "TP3: " + str.tostring(shortTP3, format.mintick) + "\n\n" +
+             "Master Coach Grade: " + str.tostring(bearGrade) + "/6\n" +
+             "Structure: BEARISH\n" +
+             "Time: " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + " Dubai"
+
+alertcondition(longSignal, title="🟢 USOIL Long Signal", message=alertLong)
+alertcondition(shortSignal, title="🔴 USOIL Short Signal", message=alertShort)
+
+// Auto-trigger alerts on signal
+if longSignal
+    alert(alertLong, alert.freq_once_per_bar_close)
+
+if shortSignal
+    alert(alertShort, alert.freq_once_per_bar_close)

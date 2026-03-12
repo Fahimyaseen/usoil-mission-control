@@ -1,0 +1,153 @@
+//@version=6
+strategy("USOIL Pullback Strategy", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=2, commission_type=strategy.commission.percent, commission_value=0.1)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+// EMA Settings
+emaFastLength = input.int(20, title="Fast EMA Length", minval=1)
+emaSlowLength = input.int(50, title="Slow EMA Length", minval=1)
+
+// RSI Settings
+rsiLength = input.int(14, title="RSI Length", minval=1)
+rsiLongEntry = input.int(40, title="RSI Long Entry Level", minval=1, maxval=100)
+rsiLongExit = input.int(60, title="RSI Long Exit Level", minval=1, maxval=100)
+rsiShortEntry = input.int(60, title="RSI Short Entry Level", minval=1, maxval=100)
+rsiShortExit = input.int(40, title="RSI Short Exit Level", minval=1, maxval=100)
+
+// ATR Settings
+atrLength = input.int(14, title="ATR Length", minval=1)
+atrMultiplierSL = input.float(1.5, title="ATR Multiplier for Stop Loss", minval=0.1, step=0.1)
+atrMultiplierTrail = input.float(2.0, title="ATR Multiplier for Trailing Stop", minval=0.1, step=0.1)
+
+// Session Filter (Dubai Time - UTC+4)
+useSessionFilter = input.bool(true, title="Use Session Filter")
+londonStart = input.int(10, title="London Session Start (Dubai)", minval=0, maxval=23)
+londonEnd = input.int(19, title="London Session End (Dubai)", minval=0, maxval=23)
+nyStart = input.int(15, title="NY Session Start (Dubai)", minval=0, maxval=23)
+nyEnd = input.int(23, title="NY Session End (Dubai)", minval=0, maxval=23)
+
+// Display Options
+showEMA = input.bool(true, title="Show EMA Lines")
+showArrows = input.bool(true, title="Show Entry/Exit Arrows")
+showStopLoss = input.bool(true, title="Show Stop Loss Line")
+showTrailing = input.bool(true, title="Show Trailing Stop Line")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INDICATORS
+// ═════════════════════════════════════════════════════════════════════════════
+
+// EMAs
+emaFast = ta.ema(close, emaFastLength)
+emaSlow = ta.ema(close, emaSlowLength)
+
+// RSI
+rsi = ta.rsi(close, rsiLength)
+
+// ATR
+atr = ta.atr(atrLength)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SESSION FILTER (Dubai Time)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Get current hour in Dubai time (UTC+4)
+currentHour = hour(time, "UTC+4")
+
+// Check if within trading sessions
+inLondonSession = currentHour >= londonStart and currentHour < londonEnd
+inNYSession = currentHour >= nyStart and currentHour <= nyEnd
+inTradingSession = inLondonSession or inNYSession
+
+sessionValid = useSessionFilter ? inTradingSession : true
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ENTRY CONDITIONS
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Long Entry Conditions
+longCondition1 = close > emaFast  // Price above fast EMA
+longCondition2 = ta.crossover(rsi, rsiLongEntry)  // RSI crosses above entry level
+longCondition3 = close > emaSlow  // Trend filter - above slow EMA
+
+longEntry = longCondition1 and longCondition2 and longCondition3 and sessionValid
+
+// Short Entry Conditions (reverse)
+shortCondition1 = close < emaFast  // Price below fast EMA
+shortCondition2 = ta.crossunder(rsi, rsiShortEntry)  // RSI crosses below entry level
+shortCondition3 = close < emaSlow  // Trend filter - below slow EMA
+
+shortEntry = shortCondition1 and shortCondition2 and shortCondition3 and sessionValid
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EXIT CONDITIONS
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Long Exit - RSI crosses below exit level
+longExit = ta.crossunder(rsi, rsiLongExit)
+
+// Short Exit - RSI crosses above exit level
+shortExit = ta.crossover(rsi, rsiShortExit)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STRATEGY EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Track if we're in a position
+inLongPosition = strategy.position_size > 0
+inShortPosition = strategy.position_size < 0
+inPosition = inLongPosition or inShortPosition
+
+// Calculate Stop Loss distances
+longStopDistance = atr * atrMultiplierSL
+shortStopDistance = atr * atrMultiplierSL
+
+// Entry Logic - Only enter if not already in position
+if longEntry and not inPosition
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long SL", "Long", stop=close - longStopDistance, trail_points=atr * atrMultiplierTrail / syminfo.mintick, trail_offset=atr * atrMultiplierTrail / syminfo.mintick)
+
+if shortEntry and not inPosition
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short SL", "Short", stop=close + shortStopDistance, trail_points=atr * atrMultiplierTrail / syminfo.mintick, trail_offset=atr * atrMultiplierTrail / syminfo.mintick)
+
+// Exit Logic - Close on RSI signal
+if longExit and inLongPosition
+    strategy.close("Long", comment="RSI Exit")
+
+if shortExit and inShortPosition
+    strategy.close("Short", comment="RSI Exit")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═════════════════════════════════════════════════════════════════════════════
+
+// EMA Lines
+plot(showEMA ? emaFast : na, title="Fast EMA", color=color.new(color.orange, 0), linewidth=2)
+plot(showEMA ? emaSlow : na, title="Slow EMA", color=color.new(color.blue, 0), linewidth=2)
+
+// Entry/Exit Arrows
+plotshape(showArrows and longEntry and not inPosition[1], title="Long Entry", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small, text="L")
+plotshape(showArrows and shortEntry and not inPosition[1], title="Short Entry", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, text="S")
+plotshape(showArrows and longExit and inLongPosition[1], title="Long Exit", location=location.abovebar, color=color.gray, style=shape.xcross, size=size.tiny)
+plotshape(showArrows and shortExit and inShortPosition[1], title="Short Exit", location=location.belowbar, color=color.gray, style=shape.xcross, size=size.tiny)
+
+// Session Background Highlight
+bgcolor(useSessionFilter and inTradingSession ? color.new(color.green, 90) : na, title="Trading Session")
+
+// RSI Panel
+rsiPlot = plot(rsi, title="RSI", color=color.purple, display=display.pane)
+rsiUpper = hline(rsiLongExit, "RSI Upper", color=color.gray, linestyle=hline.style_dashed)
+rsiLower = hline(rsiShortExit, "RSI Lower", color=color.gray, linestyle=hline.style_dashed)
+rsiMid = hline(50, "RSI Mid", color=color.gray, linestyle=hline.style_dotted)
+fill(rsiUpper, rsiLower, color=color.new(color.purple, 90), title="RSI Zone")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+alertcondition(longEntry, title="Long Entry", message="USOIL Long Entry Signal")
+alertcondition(shortEntry, title="Short Entry", message="USOIL Short Entry Signal")
+alertcondition(longExit, title="Long Exit", message="USOIL Long Exit Signal")
+alertcondition(shortExit, title="Short Exit", message="USOIL Short Exit Signal")

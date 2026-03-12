@@ -1,0 +1,138 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © fahimyaseen
+// XAUUSD Gold Trading Strategy - 15m
+
+//@version=5
+strategy(
+ 'Gold Hunter 15m',
+ shorttitle = 'Gold Hunter',
+ overlay = true,
+ pyramiding = 0,
+ default_qty_type = strategy.percent_of_equity,
+ default_qty_value = 2,
+ initial_capital = 10000)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+// Trend
+emaFast = input.int(9, 'Fast EMA', minval=1)
+emaSlow = input.int(21, 'Slow EMA', minval=1)
+emaTrend = input.int(50, 'Trend EMA', minval=1)
+
+// RSI
+rsiLength = input.int(14, 'RSI Length', minval=1)
+rsiOverbought = input.int(70, 'RSI Overbought', minval=50, maxval=100)
+rsiOversold = input.int(30, 'RSI Oversold', minval=0, maxval=50)
+
+// ATR for SL/TP
+atrLength = input.int(14, 'ATR Length', minval=1)
+atrMultiplierSL = input.float(2.0, 'ATR Multiplier for SL', step=0.1)
+atrMultiplierTP = input.float(3.0, 'ATR Multiplier for TP', step=0.1)
+
+// Session filter (London/NY for Gold)
+useSessionFilter = input.bool(true, 'Use Session Filter')
+londonStart = input.int(10, 'London Start (Dubai)', minval=0, maxval=23)
+londonEnd = input.int(19, 'London End (Dubai)', minval=0, maxval=23)
+nyStart = input.int(15, 'NY Start (Dubai)', minval=0, maxval=23)
+nyEnd = input.int(23, 'NY End (Dubai)', minval=0, maxval=23)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INDICATORS
+// ═════════════════════════════════════════════════════════════════════════════
+fastMA = ta.ema(close, emaFast)
+slowMA = ta.ema(close, emaSlow)
+trendMA = ta.ema(close, emaTrend)
+
+rsi = ta.rsi(close, rsiLength)
+atr = ta.atr(atrLength)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SESSION FILTER
+// ═════════════════════════════════════════════════════════════════════════════
+currentHour = hour(time, "UTC+4")
+inLondonSession = currentHour >= londonStart and currentHour < londonEnd
+inNYSession = currentHour >= nyStart and currentHour <= nyEnd
+inTradingSession = inLondonSession or inNYSession
+sessionValid = useSessionFilter ? inTradingSession : true
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNAL LOGIC
+// ═════════════════════════════════════════════════════════════════════════════
+// Trend direction
+bullTrend = close > trendMA
+bearTrend = close < trendMA
+
+// Entry conditions
+longCondition = ta.crossover(fastMA, slowMA) and bullTrend and rsi < rsiOverbought and sessionValid
+shortCondition = ta.crossunder(fastMA, slowMA) and bearTrend and rsi > rsiOversold and sessionValid
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+longSL = close - (atr * atrMultiplierSL)
+longTP = close + (atr * atrMultiplierTP)
+shortSL = close + (atr * atrMultiplierSL)
+shortTP = close - (atr * atrMultiplierTP)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STRATEGY EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+if longCondition and strategy.position_size <= 0
+    strategy.entry('Long', strategy.long)
+    strategy.exit('Long Exit', 'Long', stop=longSL, limit=longTP)
+
+if shortCondition and strategy.position_size >= 0
+    strategy.entry('Short', strategy.short)
+    strategy.exit('Short Exit', 'Short', stop=shortSL, limit=shortTP)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═════════════════════════════════════════════════════════════════════════════
+plot(fastMA, 'Fast EMA', color=color.new(color.orange, 0), linewidth=2)
+plot(slowMA, 'Slow EMA', color=color.new(color.blue, 0), linewidth=2)
+plot(trendMA, 'Trend EMA', color=color.new(color.purple, 0), linewidth=2)
+
+plotshape(longCondition, title='Long', location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal, text='LONG')
+plotshape(shortCondition, title='Short', location=location.abovebar, color=color.red, style=shape.triangledown, size=size.normal, text='SHORT')
+
+bgcolor(longCondition ? color.new(color.green, 90) : shortCondition ? color.new(color.red, 90) : na)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═════════════════════════════════════════════════════════════════════════════
+var table dash = table.new(position.top_right, 2, 7, frame_color=color.gray, bgcolor=color.new(color.black, 10))
+
+if barstate.islast
+    table.cell(dash, 0, 0, 'GOLD HUNTER 15m', text_color=color.white, bgcolor=color.new(color.gold, 80))
+    table.merge_cells(dash, 0, 0, 1, 0)
+    
+    signalText = longCondition ? 'LONG' : shortCondition ? 'SHORT' : 'WAIT'
+    signalCol = longCondition ? color.green : shortCondition ? color.red : color.gray
+    
+    table.cell(dash, 0, 1, 'Signal', text_color=color.white)
+    table.cell(dash, 1, 1, signalText, text_color=signalCol)
+    
+    table.cell(dash, 0, 2, 'Trend', text_color=color.white)
+    table.cell(dash, 1, 2, bullTrend ? 'BULLISH' : 'BEARISH', text_color=bullTrend ? color.green : color.red)
+    
+    table.cell(dash, 0, 3, 'RSI', text_color=color.white)
+    table.cell(dash, 1, 3, str.tostring(rsi, '#.'), text_color=rsi > 50 ? color.green : color.red)
+    
+    table.cell(dash, 0, 4, 'ATR', text_color=color.white)
+    table.cell(dash, 1, 4, str.tostring(atr, format.mintick), text_color=color.yellow)
+    
+    table.cell(dash, 0, 5, 'Entry', text_color=color.white)
+    table.cell(dash, 1, 5, str.tostring(close, format.mintick), text_color=color.white)
+    
+    table.cell(dash, 0, 6, 'Session', text_color=color.white)
+    table.cell(dash, 1, 6, inTradingSession ? 'ACTIVE' : 'CLOSED', text_color=inTradingSession ? color.green : color.gray)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertMessageLong = 'XAUUSD LONG: Entry ' + str.tostring(close, format.mintick) + ' | SL: ' + str.tostring(longSL, format.mintick) + ' | TP: ' + str.tostring(longTP, format.mintick)
+alertMessageShort = 'XAUUSD SHORT: Entry ' + str.tostring(close, format.mintick) + ' | SL: ' + str.tostring(shortSL, format.mintick) + ' | TP: ' + str.tostring(shortTP, format.mintick)
+
+alertcondition(longCondition, title='Gold Long Signal', message=alertMessageLong)
+alertcondition(shortCondition, title='Gold Short Signal', message=alertMessageShort)

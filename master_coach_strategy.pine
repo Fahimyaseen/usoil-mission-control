@@ -1,0 +1,212 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © fahimyaseen
+// Modified with Alerts & Strategy Logic
+
+//@version=6
+strategy("Master Coach with Alerts", shorttitle="MC Brain + Alerts", overlay = true, initial_capital = 10000, default_qty_type = strategy.percent_of_equity, default_qty_value = 2)
+
+// --- Constants ---
+const color COLOR_BULL = #089981
+const color COLOR_BEAR = #f23645
+const color COLOR_NEUT = #787b86
+const string GRP_INST = "Master Coach Filters"
+const string GRP_ALERTS = "Alert Settings"
+const string GRP_RISK = "Risk Management"
+
+// --- Inputs ---
+mfiLength = input.int(14, "Money Flow Length", minval = 5, group = GRP_INST)
+rsiLength = input.int(14, "RSI Length", minval = 5, group = GRP_INST)
+htfTimeframe = input.timeframe("15", "HTF Trend Filter", group = GRP_INST)
+volSMA_len = input.int(20, "Volume SMA Length", group = GRP_INST)
+structLen = input.int(5, "Structure Lookback", minval = 2, group = GRP_INST)
+
+// Alert Settings
+minGradeForSignal = input.int(4, "Minimum Grade for Signal (1-6)", minval = 1, maxval = 6, group = GRP_ALERTS)
+useHTFFilter = input.bool(true, "Use HTF Trend Filter", group = GRP_ALERTS)
+useSessionFilter = input.bool(false, "Use Session Filter", group = GRP_ALERTS)
+londonStart = input.int(10, "London Start (Dubai)", minval = 0, maxval = 23, group = GRP_ALERTS)
+londonEnd = input.int(19, "London End (Dubai)", minval = 0, maxval = 23, group = GRP_ALERTS)
+nyStart = input.int(15, "NY Start (Dubai)", minval = 0, maxval = 23, group = GRP_ALERTS)
+nyEnd = input.int(23, "NY End (Dubai)", minval = 0, maxval = 23, group = GRP_ALERTS)
+
+// Risk Management
+atrLength = input.int(14, "ATR Length", group = GRP_RISK)
+atrMultiplierSL = input.float(1.5, "ATR Multiplier for SL", step = 0.1, group = GRP_RISK)
+atrMultiplierTP1 = input.float(1.0, "ATR Multiplier for TP1", step = 0.1, group = GRP_RISK)
+atrMultiplierTP2 = input.float(2.0, "ATR Multiplier for TP2", step = 0.1, group = GRP_RISK)
+atrMultiplierTP3 = input.float(3.0, "ATR Multiplier for TP3", step = 0.1, group = GRP_RISK)
+
+// --- Market Structure Logic ---
+var float lastHigh = na
+var float lastLow = na
+var int structure = 0 // 1 for Bullish, -1 for Bearish
+
+pH = ta.pivothigh(high, structLen, structLen)
+pL = ta.pivotlow(low, structLen, structLen)
+
+if not na(pH)
+    lastHigh := pH
+if not na(pL)
+    lastLow := pL
+
+if close > lastHigh
+    structure := 1
+else if close < lastLow
+    structure := -1
+
+structBull = structure == 1
+
+// --- Core Logic (The Brain) ---
+mfiVal = ta.mfi(close, mfiLength)
+mfiBull = mfiVal > 50
+htfEMA = request.security(syminfo.tickerid, htfTimeframe, ta.ema(close, 50), lookahead = barmerge.lookahead_off)
+htfBull = close > htfEMA
+rsiVal = ta.rsi(close, rsiLength)
+rsiBull = rsiVal > 50
+volSMA = ta.sma(volume, volSMA_len)
+volBull = volume > volSMA
+atr = ta.atr(atrLength)
+volatilityOk = atr > ta.sma(atr, 50)
+
+// Grading (out of 6)
+int bullGrade = (mfiBull ? 1 : 0) + (htfBull ? 1 : 0) + (rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (structBull ? 1 : 0)
+int bearGrade = (not mfiBull ? 1 : 0) + (not htfBull ? 1 : 0) + (not rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (not structBull ? 1 : 0)
+
+// --- Session Filter ---
+currentHour = hour(time, "UTC+4")
+inLondonSession = currentHour >= londonStart and currentHour < londonEnd
+inNYSession = currentHour >= nyStart and currentHour <= nyEnd
+inTradingSession = inLondonSession or inNYSession
+sessionValid = useSessionFilter ? inTradingSession : true
+
+// --- Signal Logic ---
+strongBull = bullGrade >= minGradeForSignal and (not useHTFFilter or htfBull) and sessionValid
+strongBear = bearGrade >= minGradeForSignal and (not useHTFFilter or not htfBull) and sessionValid
+
+// Detect signal changes
+var bool wasBull = false
+var bool wasBear = false
+
+bullSignal = strongBull and not wasBull
+bearSignal = strongBear and not wasBear
+
+if bullSignal
+    wasBull := true
+    wasBear := false
+else if bearSignal
+    wasBull := false
+    wasBear := true
+else if not strongBull and not strongBear
+    wasBull := false
+    wasBear := false
+
+// --- Strategy Execution ---
+// Calculate SL and TP levels
+longSL = close - (atr * atrMultiplierSL)
+longTP1 = close + (atr * atrMultiplierTP1)
+longTP2 = close + (atr * atrMultiplierTP2)
+longTP3 = close + (atr * atrMultiplierTP3)
+
+shortSL = close + (atr * atrMultiplierSL)
+shortTP1 = close - (atr * atrMultiplierTP1)
+shortTP2 = close - (atr * atrMultiplierTP2)
+shortTP3 = close - (atr * atrMultiplierTP3)
+
+// Position tracking
+inLongPosition = strategy.position_size > 0
+inShortPosition = strategy.position_size < 0
+
+// Entry logic
+if bullSignal and not inLongPosition and not inShortPosition
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long SL", "Long", stop = longSL, limit = longTP3)
+
+if bearSignal and not inShortPosition and not inLongPosition
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short SL", "Short", stop = shortSL, limit = shortTP3)
+
+// --- Plotting ---
+// Signal arrows
+plotshape(bullSignal, title = "Bull Signal", location = location.belowbar, color = COLOR_BULL, style = shape.triangleup, size = size.normal, text = "LONG")
+plotshape(bearSignal, title = "Bear Signal", location = location.abovebar, color = COLOR_BEAR, style = shape.triangledown, size = size.normal, text = "SHORT")
+
+// SL and TP lines for current position
+var line longSLLine = na
+var line longTP1Line = na
+var line longTP2Line = na
+var line longTP3Line = na
+var line shortSLLine = na
+var line shortTP1Line = na
+var line shortTP2Line = na
+var line shortTP3Line = na
+
+if bullSignal
+    longSLLine := line.new(bar_index, longSL, bar_index + 20, longSL, color = COLOR_BEAR, style = line.style_dashed, width = 2)
+    longTP1Line := line.new(bar_index, longTP1, bar_index + 20, longTP1, color = COLOR_BULL, style = line.style_dashed, width = 1)
+    longTP2Line := line.new(bar_index, longTP2, bar_index + 20, longTP2, color = COLOR_BULL, style = line.style_dashed, width = 1)
+    longTP3Line := line.new(bar_index, longTP3, bar_index + 20, longTP3, color = COLOR_BULL, style = line.style_dashed, width = 2)
+
+if bearSignal
+    shortSLLine := line.new(bar_index, shortSL, bar_index + 20, shortSL, color = COLOR_BULL, style = line.style_dashed, width = 2)
+    shortTP1Line := line.new(bar_index, shortTP1, bar_index + 20, shortTP1, color = COLOR_BEAR, style = line.style_dashed, width = 1)
+    shortTP2Line := line.new(bar_index, shortTP2, bar_index + 20, shortTP2, color = COLOR_BEAR, style = line.style_dashed, width = 1)
+    shortTP3Line := line.new(bar_index, shortTP3, bar_index + 20, shortTP3, color = COLOR_BEAR, style = line.style_dashed, width = 2)
+
+// Background color for strong signals
+bgcolor(strongBull ? color.new(COLOR_BULL, 90) : strongBear ? color.new(COLOR_BEAR, 90) : na, title = "Signal Background")
+
+// --- Dashboard ---
+var table brain = table.new("bottom_right", 2, 10, frame_color = COLOR_NEUT, frame_width = 1, border_color = COLOR_NEUT, border_width = 1, bgcolor = color.new(chart.bg_color, 15))
+
+f_add_row(int _row, string _label, string _val, color _c) =>
+    table.cell(brain, 0, _row, _label, text_color = chart.fg_color, text_halign = text.align_left, text_size = size.small)
+    table.cell(brain, 1, _row, _val, text_color = _c, text_halign = text.align_right, text_size = size.small)
+
+if barstate.islast
+    table.cell(brain, 0, 0, "MASTER COACH BRAIN", text_color = chart.fg_color, bgcolor = color.new(COLOR_NEUT, 80))
+    table.merge_cells(brain, 0, 0, 1, 0)
+    
+    string gradeStr = bullGrade >= minGradeForSignal ? str.tostring(bullGrade) + "/6 BULL" : bearGrade >= minGradeForSignal ? str.tostring(bearGrade) + "/6 BEAR" : "NEUTRAL"
+    color gradeCol = bullGrade >= minGradeForSignal ? COLOR_BULL : bearGrade >= minGradeForSignal ? COLOR_BEAR : COLOR_NEUT
+    
+    f_add_row(1, "Signal Status", bullSignal ? "🟢 LONG" : bearSignal ? "🔴 SHORT" : "WAIT", bullSignal ? COLOR_BULL : bearSignal ? COLOR_BEAR : COLOR_NEUT)
+    f_add_row(2, "Total Confirmation", gradeStr, gradeCol)
+    f_add_row(3, "Market Structure", structBull ? "BULLISH (BOS)" : "BEARISH (BOS)", structBull ? COLOR_BULL : COLOR_BEAR)
+    f_add_row(4, "HTF Trend (15m)", htfBull ? "BULLISH" : "BEARISH", htfBull ? COLOR_BULL : COLOR_BEAR)
+    f_add_row(5, "Money Flow (MFI)", mfiBull ? "INFLOW" : "OUTFLOW", mfiBull ? COLOR_BULL : COLOR_BEAR)
+    f_add_row(6, "Momentum (RSI)", rsiBull ? "BULLISH" : "BEARISH", rsiBull ? COLOR_BULL : COLOR_BEAR)
+    f_add_row(7, "Volume Status", volBull ? "HIGH" : "LOW", volBull ? COLOR_BULL : COLOR_NEUT)
+    f_add_row(8, "Volatility", volatilityOk ? "ACTIVE" : "SQUEEZE", volatilityOk ? COLOR_BULL : COLOR_BEAR)
+    
+    table.cell(brain, 0, 9, "Trade with Irumaru Entry Confirmation", text_color = color.new(chart.fg_color, 50), text_size = size.tiny)
+    table.merge_cells(brain, 0, 9, 1, 9)
+
+// --- Alerts ---
+// Build alert message
+alertMessageLong = "🛢️ USOIL LONG SIGNAL\n\n" +
+                   "Entry: " + str.tostring(close, format.mintick) + "\n" +
+                   "SL: " + str.tostring(longSL, format.mintick) + "\n" +
+                   "TP1: " + str.tostring(longTP1, format.mintick) + "\n" +
+                   "TP2: " + str.tostring(longTP2, format.mintick) + "\n" +
+                   "TP3: " + str.tostring(longTP3, format.mintick) + "\n\n" +
+                   "Grade: " + str.tostring(bullGrade) + "/6\n" +
+                   "Time: " + str.tostring(hour) + ":" + str.tostring(minute)
+
+alertMessageShort = "🛢️ USOIL SHORT SIGNAL\n\n" +
+                    "Entry: " + str.tostring(close, format.mintick) + "\n" +
+                    "SL: " + str.tostring(shortSL, format.mintick) + "\n" +
+                    "TP1: " + str.tostring(shortTP1, format.mintick) + "\n" +
+                    "TP2: " + str.tostring(shortTP2, format.mintick) + "\n" +
+                    "TP3: " + str.tostring(shortTP3, format.mintick) + "\n\n" +
+                    "Grade: " + str.tostring(bearGrade) + "/6\n" +
+                    "Time: " + str.tostring(hour) + ":" + str.tostring(minute)
+
+alertcondition(bullSignal, title = "🟢 Long Signal", message = alertMessageLong)
+alertcondition(bearSignal, title = "🔴 Short Signal", message = alertMessageShort)
+
+// Strategy alerts
+if bullSignal
+    alert(alertMessageLong, alert.freq_once_per_bar_close)
+
+if bearSignal
+    alert(alertMessageShort, alert.freq_once_per_bar_close)

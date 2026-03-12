@@ -1,0 +1,329 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © traderschatroom88 / fahimyaseen
+// XXX_v6 + Master Coach Fusion - Filtered Strategy
+
+//@version=6
+strategy(
+ 'XXX+MC Fusion',
+ shorttitle = 'XXX+MC Fusion',
+ overlay = true,
+ explicit_plot_zorder = true,
+ pyramiding = 0,
+ default_qty_type = strategy.percent_of_equity,
+ default_qty_value = 10,
+ calc_on_every_tick = false,
+ process_orders_on_close = true,
+ initial_capital = 10000)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUT GROUPS
+// ═════════════════════════════════════════════════════════════════════════════
+G_MC = '🧠 Master Coach Filter'
+G_XXX = '📊 XXX Indicator'
+G_RISK = '🛡️ Risk Management'
+G_MSG = '📱 Webhook Messages'
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER COACH FILTER INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+mcEnabled = input.bool(true, 'Enable Master Coach Filter', group=G_MC)
+mfiLength = input.int(14, 'MFI Length', minval=5, group=G_MC)
+rsiLength = input.int(14, 'RSI Length', minval=5, group=G_MC)
+htfTimeframe = input.timeframe('15', 'HTF Trend Filter', group=G_MC)
+volSMA_len = input.int(20, 'Volume SMA Length', group=G_MC)
+structLen = input.int(5, 'Structure Lookback', minval=2, group=G_MC)
+minGrade = input.int(4, 'Min Grade for Signal (1-6)', minval=1, maxval=6, group=G_MC)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// XXX INDICATOR INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+stratRes = input.timeframe('15', 'TIMEFRAME', group=G_XXX)
+useRes = input.bool(true, 'Use Alternate Signals', group=G_XXX)
+intRes = input.int(8, 'Multiplier for Alternate Signals', group=G_XXX)
+basisType = input.string('ALMA', 'MA Type', options=['TEMA', 'HullMA', 'ALMA'], group=G_XXX)
+basisLen = input.int(2, 'MA Period', minval=1, group=G_XXX)
+offsetSigma = input.int(5, 'Sigma for ALMA', minval=0, group=G_XXX)
+offsetALMA = input.float(0.85, 'Offset for ALMA', minval=0, step=0.01, group=G_XXX)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+i_lxLvlTP1 = input.float(1.0, 'TP1 Level (%)', group=G_RISK)
+i_lxQtyTP1 = input.float(50, 'TP1 Qty (%)', group=G_RISK)
+i_lxLvlTP2 = input.float(1.5, 'TP2 Level (%)', group=G_RISK)
+i_lxQtyTP2 = input.float(30, 'TP2 Qty (%)', group=G_RISK)
+i_lxLvlTP3 = input.float(2.0, 'TP3 Level (%)', group=G_RISK)
+i_lxQtyTP3 = input.float(20, 'TP3 Qty (%)', group=G_RISK)
+i_lxLvlSL = input.float(0.5, 'Stop Loss (%)', group=G_RISK)
+i_sxQtyTP1 = i_lxQtyTP1
+i_sxQtyTP2 = i_lxQtyTP2
+i_sxQtyTP3 = i_lxQtyTP3
+i_sxLvlTP1 = i_lxLvlTP1
+i_sxLvlTP2 = i_lxLvlTP2
+i_sxLvlTP3 = i_lxLvlTP3
+i_sxLvlSL = i_lxLvlSL
+
+// ═════════════════════════════════════════════════════════════════════════════
+// WEBHOOK MESSAGE INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+i_leMsg = input.string('Long Entry', 'Long Entry Message', group=G_MSG)
+i_lxMsgSL = input.string('Long SL', 'Long SL Message', group=G_MSG)
+i_lxMsgTP1 = input.string('Long TP1', 'Long TP1 Message', group=G_MSG)
+i_lxMsgTP2 = input.string('Long TP2', 'Long TP2 Message', group=G_MSG)
+i_lxMsgTP3 = input.string('Long TP3', 'Long TP3 Message', group=G_MSG)
+i_seMsg = input.string('Short Entry', 'Short Entry Message', group=G_MSG)
+i_sxMsgSL = input.string('Short SL', 'Short SL Message', group=G_MSG)
+i_sxMsgTP1 = input.string('Short TP1', 'Short TP1 Message', group=G_MSG)
+i_sxMsgTP2 = input.string('Short TP2', 'Short TP2 Message', group=G_MSG)
+i_sxMsgTP3 = input.string('Short TP3', 'Short TP3 Message', group=G_MSG)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER COACH LOGIC (Filter)
+// ═════════════════════════════════════════════════════════════════════════════
+var float lastHigh = na
+var float lastLow = na
+var int structure = 0
+
+pH = ta.pivothigh(high, structLen, structLen)
+pL = ta.pivotlow(low, structLen, structLen)
+
+if not na(pH)
+    lastHigh := pH
+if not na(pL)
+    lastLow := pL
+
+if close > lastHigh
+    structure := 1
+else if close < lastLow
+    structure := -1
+
+structBull = structure == 1
+
+// Core indicators
+mfiVal = ta.mfi(close, mfiLength)
+mfiBull = mfiVal > 50
+htfEMA = request.security(syminfo.tickerid, htfTimeframe, ta.ema(close, 50), lookahead=barmerge.lookahead_off)
+htfBull = close > htfEMA
+rsiVal = ta.rsi(close, rsiLength)
+rsiBull = rsiVal > 50
+volSMA = ta.sma(volume, volSMA_len)
+volBull = volume > volSMA
+atr = ta.atr(14)
+volatilityOk = atr > ta.sma(atr, 50)
+
+// Grading system
+int bullGrade = (mfiBull ? 1 : 0) + (htfBull ? 1 : 0) + (rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (structBull ? 1 : 0)
+int bearGrade = (not mfiBull ? 1 : 0) + (not htfBull ? 1 : 0) + (not rsiBull ? 1 : 0) + (volBull ? 1 : 0) + (volatilityOk ? 1 : 0) + (not structBull ? 1 : 0)
+
+mcBull = bullGrade >= minGrade
+mcBear = bearGrade >= minGrade
+
+// ═════════════════════════════════════════════════════════════════════════════
+// XXX INDICATOR LOGIC
+// ═════════════════════════════════════════════════════════════════════════════
+variant(type, src, len, offSig, offALMA) =>
+    v1 = ta.sma(src, len)
+    v2 = ta.ema(src, len)
+    v8 = ta.wma(2 * ta.wma(src, len / 2) - ta.wma(src, len), math.round(math.sqrt(len)))
+    v10 = ta.alma(src, len, offALMA, offSig)
+    type == 'EMA' ? v2 : type == 'HullMA' ? v8 : type == 'ALMA' ? v10 : v1
+
+reso(exp, use, res) =>
+    security_1 = request.security(syminfo.tickerid, res, exp, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+    use ? security_1 : exp
+
+closeSeries = variant(basisType, close, basisLen, offsetSigma, offsetALMA)
+openSeries = variant(basisType, open, basisLen, offsetSigma, offsetALMA)
+closeSeriesAlt = reso(closeSeries, useRes, stratRes)
+openSeriesAlt = reso(openSeries, useRes, stratRes)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNAL GENERATION (XXX + MC Filter)
+// ═════════════════════════════════════════════════════════════════════════════
+leTriggerRaw = ta.crossover(closeSeriesAlt, openSeriesAlt)
+seTriggerRaw = ta.crossunder(closeSeriesAlt, openSeriesAlt)
+
+// Apply Master Coach filter
+leTrigger = mcEnabled ? (leTriggerRaw and mcBull) : leTriggerRaw
+seTrigger = mcEnabled ? (seTriggerRaw and mcBear) : seTriggerRaw
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RISK MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+i_src = close
+slTopLvl = i_src + (i_src * (i_lxLvlSL / 100))
+slBotLvl = i_src - (i_src * (i_lxLvlSL / 100))
+
+f_tp(_condition, _conditionValue, _leTrigger, _seTrigger, _src, _lxLvlTP, _sxLvlTP) =>
+    var float _tpLine = 0.0
+    _topLvl = _src + (_src * (_lxLvlTP / 100))
+    _botLvl = _src - (_src * (_sxLvlTP / 100))
+    _tpLine := _condition[1] != _conditionValue and _leTrigger ? _topLvl :
+               _condition[1] != -_conditionValue and _seTrigger ? _botLvl : nz(_tpLine[1])
+    [_tpLine]
+
+f_cross(_scr1, _scr2, _over) =>
+    _over ? _scr1 > _scr2 and _scr1[1] < _scr2[1] : _scr1 < _scr2 and _scr1[1] > _scr2[1]
+
+// State variables
+var float condition = 0.0
+var float slLine = 0.0
+var float entryLine = 0.0
+
+entryLine := leTrigger and condition[1] <= 0.0 ? close :
+             seTrigger and condition[1] >= 0.0 ? close : nz(entryLine[1])
+
+slLine := condition[1] <= 0.0 and leTrigger ? slBotLvl :
+          condition[1] >= 0.0 and seTrigger ? slTopLvl : nz(slLine[1])
+
+[tp3Line] = f_tp(condition, 1.2, leTrigger, seTrigger, i_src, i_lxLvlTP3, i_sxLvlTP3)
+[tp2Line] = f_tp(condition, 1.1, leTrigger, seTrigger, i_src, i_lxLvlTP2, i_sxLvlTP2)
+[tp1Line] = f_tp(condition, 1.0, leTrigger, seTrigger, i_src, i_lxLvlTP1, i_sxLvlTP1)
+
+slLong = f_cross(low, slLine, false)
+slShort = f_cross(high, slLine, true)
+tp3Long = f_cross(high, tp3Line, true)
+tp3Short = f_cross(low, tp3Line, false)
+tp2Long = f_cross(high, tp2Line, true)
+tp2Short = f_cross(low, tp2Line, false)
+tp1Long = f_cross(high, tp1Line, true)
+tp1Short = f_cross(low, tp1Line, false)
+
+// State machine
+switch
+    leTrigger and condition[1] <= 0.0 => condition := 1.0
+    seTrigger and condition[1] >= 0.0 => condition := -1.0
+    tp3Long and condition[1] == 1.2 => condition := 1.3
+    tp3Short and condition[1] == -1.2 => condition := -1.3
+    tp2Long and condition[1] == 1.1 => condition := 1.2
+    tp2Short and condition[1] == -1.1 => condition := -1.2
+    tp1Long and condition[1] == 1.0 => condition := 1.1
+    tp1Short and condition[1] == -1.0 => condition := -1.1
+    slLong and condition[1] >= 1.0 => condition := 0.0
+    slShort and condition[1] <= -1.0 => condition := 0.0
+
+longE = leTrigger and condition[1] <= 0.0 and condition == 1.0
+shortE = seTrigger and condition[1] >= 0.0 and condition == -1.0
+longSL = slLong and condition[1] >= 1.0 and condition == 0.0
+shortSL = slShort and condition[1] <= -1.0 and condition == 0.0
+longTP3 = tp3Long and condition[1] == 1.2 and condition == 1.3
+shortTP3 = tp3Short and condition[1] == -1.2 and condition == -1.3
+longTP2 = tp2Long and condition[1] == 1.1 and condition == 1.2
+shortTP2 = tp2Short and condition[1] == -1.1 and condition == -1.2
+longTP1 = tp1Long and condition[1] == 1.0 and condition == 1.1
+shortTP1 = tp1Short and condition[1] == -1.0 and condition == -1.1
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STRATEGY EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+// Long orders
+if strategy.position_size <= 0 and longE and barstate.isconfirmed
+    strategy.entry('Long', strategy.long, alert_message=i_leMsg, comment='LE')
+
+if strategy.position_size > 0 and condition == 1.0
+    strategy.exit('LXTP1', 'Long', qty_percent=i_lxQtyTP1, limit=tp1Line, stop=slLine,
+                  comment_profit='LXTP1', comment_loss='SL', alert_profit=i_lxMsgTP1, alert_loss=i_lxMsgSL)
+
+if strategy.position_size > 0 and condition == 1.1
+    strategy.exit('LXTP2', 'Long', qty_percent=i_lxQtyTP2, limit=tp2Line, stop=slLine,
+                  comment_profit='LXTP2', comment_loss='SL', alert_profit=i_lxMsgTP2, alert_loss=i_lxMsgSL)
+
+if strategy.position_size > 0 and condition == 1.2
+    strategy.exit('LXTP3', 'Long', qty_percent=i_lxQtyTP3, limit=tp3Line, stop=slLine,
+                  comment_profit='LXTP3', comment_loss='SL', alert_profit=i_lxMsgTP3, alert_loss=i_lxMsgSL)
+
+// Short orders
+if strategy.position_size >= 0 and shortE and barstate.isconfirmed
+    strategy.entry('Short', strategy.short, alert_message=i_seMsg, comment='SE')
+
+if strategy.position_size < 0 and condition == -1.0
+    strategy.exit('SXTP1', 'Short', qty_percent=i_lxQtyTP1, limit=tp1Line, stop=slLine,
+                  comment_profit='SXTP1', comment_loss='SL', alert_profit=i_sxMsgTP1, alert_loss=i_sxMsgSL)
+
+if strategy.position_size < 0 and condition == -1.1
+    strategy.exit('SXTP2', 'Short', qty_percent=i_lxQtyTP2, limit=tp2Line, stop=slLine,
+                  comment_profit='SXTP2', comment_loss='SL', alert_profit=i_sxMsgTP2, alert_loss=i_sxMsgSL)
+
+if strategy.position_size < 0 and condition == -1.2
+    strategy.exit('SXTP3', 'Short', qty_percent=i_lxQtyTP3, limit=tp3Line, stop=slLine,
+                  comment_profit='SXTP3', comment_loss='SL', alert_profit=i_sxMsgTP3, alert_loss=i_sxMsgSL)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═════════════════════════════════════════════════════════════════════════════
+plot(closeSeriesAlt, 'MA', color=color.orange, linewidth=2)
+
+plotshape(longE, title='Long', text='LONG', textcolor=color.white, color=color.green,
+          style=shape.labelup, size=size.small, location=location.belowbar)
+plotshape(shortE, title='Short', text='SHORT', textcolor=color.white, color=color.red,
+          style=shape.labeldown, size=size.small, location=location.abovebar)
+
+// Background color based on signal + MC grade
+bgcolor(longE ? color.new(color.green, 80) : shortE ? color.new(color.red, 80) : na)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER COACH DASHBOARD
+// ═════════════════════════════════════════════════════════════════════════════
+var table dash = table.new('top_right', 2, 9, frame_color=color.gray, bgcolor=color.new(color.black, 10))
+
+if barstate.islast
+    table.cell(dash, 0, 0, 'XXX+MC FUSION', text_color=color.white, bgcolor=color.purple)
+    table.merge_cells(dash, 0, 0, 1, 0)
+    
+    signalText = longE ? 'LONG' : shortE ? 'SHORT' : 'WAIT'
+    signalCol = longE ? color.green : shortE ? color.red : color.gray
+    
+    table.cell(dash, 0, 1, 'Signal', text_color=color.white)
+    table.cell(dash, 1, 1, signalText, text_color=signalCol)
+    
+    table.cell(dash, 0, 2, 'MC Grade', text_color=color.white)
+    table.cell(dash, 1, 2, mcBull ? str.tostring(bullGrade) + '/6 BULL' : mcBear ? str.tostring(bearGrade) + '/6 BEAR' : 'NEUTRAL',
+               text_color=mcBull ? color.green : mcBear ? color.red : color.gray)
+    
+    table.cell(dash, 0, 3, 'Structure', text_color=color.white)
+    table.cell(dash, 1, 3, structBull ? 'BULLISH' : 'BEARISH', text_color=structBull ? color.green : color.red)
+    
+    table.cell(dash, 0, 4, 'MFI', text_color=color.white)
+    table.cell(dash, 1, 4, mfiBull ? 'INFLOW' : 'OUTFLOW', text_color=mfiBull ? color.green : color.red)
+    
+    table.cell(dash, 0, 5, 'RSI', text_color=color.white)
+    table.cell(dash, 1, 5, str.tostring(rsiVal, '#.') + (rsiBull ? ' OK' : ' NO'), text_color=rsiBull ? color.green : color.red)
+    
+    table.cell(dash, 0, 6, 'Volume', text_color=color.white)
+    table.cell(dash, 1, 6, volBull ? 'HIGH' : 'LOW', text_color=volBull ? color.green : color.gray)
+    
+    table.cell(dash, 0, 7, 'Entry', text_color=color.white)
+    table.cell(dash, 1, 7, str.tostring(entryLine, format.mintick), text_color=color.yellow)
+    
+    table.cell(dash, 0, 8, 'SL / TP3', text_color=color.white)
+    table.cell(dash, 1, 8, str.tostring(slLine, format.mintick) + ' / ' + str.tostring(tp3Line, format.mintick),
+               text_color=color.white)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertMessageLong = 'USOIL LONG\n\n' +
+                   'Entry: ' + str.tostring(close, format.mintick) + '\n' +
+                   'SL: ' + str.tostring(slLine, format.mintick) + '\n' +
+                   'TP1: ' + str.tostring(tp1Line, format.mintick) + '\n' +
+                   'TP2: ' + str.tostring(tp2Line, format.mintick) + '\n' +
+                   'TP3: ' + str.tostring(tp3Line, format.mintick) + '\n\n' +
+                   'MC Grade: ' + str.tostring(bullGrade) + '/6\n' +
+                   'Filtered: ' + (mcEnabled and mcBull ? 'YES' : 'NO')
+
+alertMessageShort = 'USOIL SHORT\n\n' +
+                    'Entry: ' + str.tostring(close, format.mintick) + '\n' +
+                    'SL: ' + str.tostring(slLine, format.mintick) + '\n' +
+                    'TP1: ' + str.tostring(tp1Line, format.mintick) + '\n' +
+                    'TP2: ' + str.tostring(tp2Line, format.mintick) + '\n' +
+                    'TP3: ' + str.tostring(tp3Line, format.mintick) + '\n\n' +
+                    'MC Grade: ' + str.tostring(bearGrade) + '/6\n' +
+                    'Filtered: ' + (mcEnabled and mcBear ? 'YES' : 'NO')
+
+alertcondition(longE, title='🟢 Long Signal', message=alertMessageLong)
+alertcondition(shortE, title='🔴 Short Signal', message=alertMessageShort)
+
+if longE
+    alert(alertMessageLong, alert.freq_once_per_bar_close)
+if shortE
+    alert(alertMessageShort, alert.freq_once_per_bar_close)
